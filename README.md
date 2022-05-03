@@ -24,3 +24,5 @@ and JSON-Body:
 [{"DrugId": {"DrugId": {"Encrypted": EncryptedDrugID}}, "SocId": {"SocId": {"Encrypted": EncryptedSocId}}, "Page": Page}]
 
 **The text is encrypted in unicode so a simple mapping function is used to decode ...
+Please take a look at:
+https://www.ssec.wisc.edu/~tomw/java/unicode.html
