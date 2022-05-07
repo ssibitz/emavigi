@@ -1,6 +1,8 @@
 # emavigi
 Tool to load data from ema - vigiaccess and decode data's
 
+Written in Python 3.9
+
 Loading datas from:
 https://vigiaccess.org
 
