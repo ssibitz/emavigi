@@ -102,22 +102,6 @@ UTF8_CHAR_MAPPING_LIST = {
 
 # Invalid chars to "ignore"
 UTF8_INVALID_CHAR_MAPPING_LIST = {
-    39: "'---APOSTROPHE",
-    40: "(---LEFT PARENTHESIS",
-    41: ")---RIGHT PARENTHESIS",
-    44: ",---COMMA",
-    45: "----HYPHEN-MINUS",
-    47: "/---SOLIDUS",
-    48: "0---DIGIT ZERO",
-    49: "1---DIGIT ONE",
-    50: "2---DIGIT TWO",
-    51: "3---DIGIT THREE",
-    52: "4---DIGIT FOUR",
-    53: "5---DIGIT FIVE",
-    54: "6---DIGIT SIX",
-    55: "7---DIGIT SEVEN",
-    56: "8---DIGIT EIGHT",
-    57: "9---DIGIT NINE",
     173: "\u00ad---SOFT HYPHEN",
     847: "\u034f---COMBINING GRAPHEME JOINER",
     8203: "\u200b---ZERO WIDTH SPACE",
@@ -280,9 +264,7 @@ class VigiAccess:
         Result = False
         unicodedata.normalize('NFKD', char).encode('ascii', 'ignore')
         asciival = ord(char)
-        if (asciival >= 97 and asciival <= 122):  # a-z
-            Result = True
-        if (asciival >= 65 and asciival <= 90):  # A-Z
+        if (asciival >= 32 and asciival <= 126):  # printable chars
             Result = True
         return Result
 
