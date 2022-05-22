@@ -8,6 +8,7 @@ import os
 import requests
 import unicodedata
 import traceback
+import sys
 from datetime import date
 from pprint import pformat
 from unicodedata import *
@@ -151,7 +152,10 @@ class VigiAccess:
         # Delete old log file before restarting script
         if os.path.exists('EMAVigi.log'):
             os.remove('EMAVigi.log')
-        logging.basicConfig(filename='EMAVigi.log', encoding='utf-8', level=logging.INFO)
+        if sys.version_info.major == 3 and sys.version_info.minor >= 9:
+            logging.basicConfig(filename='EMAVigi.log', encoding='utf-8', level=logging.INFO)
+        else:
+            logging.basicConfig(filename='EMAVigi.log', level=logging.INFO)
 
     def BuildOutputFile(self, OutputfileName):
         start = timer()
