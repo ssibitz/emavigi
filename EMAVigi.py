@@ -2,18 +2,35 @@
 # EMA vigi - Tool for getting all results in plain utf-8 text
 # Copyright (c) 2022 by Stefan Sibitz
 #
-import json, requests, logging, os, unicodedata
-from unicodedata import *
+import json
+import logging
+import os
+import requests
+import unicodedata
+import traceback
 from datetime import date
-from os.path import exists
+from pprint import pformat
+from unicodedata import *
+from random import randint
+from timeit import default_timer as timer
+from datetime import timedelta
+from time import sleep, time
 
 # Search word
 SEARCH_FOR = "covid-19 vaccine"
 TAB = "    "
 # Site urls + services
 SITE_URL = "https://vigiaccess.org"
+
+# 1.) Search by the keyword <SEARCH_FOR> (Search button was clicked) -> A full list with all drugid's containing the keyword will be returned. The first entry is the "exact" match of the keyword !
+# https://vigiaccess.org/protocol/IProtocol/search
 SEARCH_4_DRUG_URL = SITE_URL + "/protocol/IProtocol/search"
+
+# 2.) Get a list of all available distribution's containing the drugid / keyword <SEARCH_FOR>
 LIST_ALL_GROUPS = SITE_URL + "/protocol/IProtocol/distribution"
+
+# 3.) Page by page reloading of the primaryterms to the individual distributions as same as when the user is clicking on the "Load more..." link.
+# https://vigiaccess.org/protocol/IProtocol/primaryTerm
 LIST_ALL_TERMS = SITE_URL + "/protocol/IProtocol/primaryTerm"
 
 # List to de obfuscate invalid chars, but readable !
@@ -119,6 +136,11 @@ UTF8_INVALID_CHAR_MAPPING_LIST = {
     65279: "\ufeff---ZERO WIDTH NO-BREAK SPACE",
 }
 
+# Additional headers to send (User agent, ...)
+additional_headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36',
+}
+
 # Class to access vigiaccess and parse results from services
 class VigiAccess:
     def __init__(self):
@@ -132,19 +154,27 @@ class VigiAccess:
         logging.basicConfig(filename='EMAVigi.log', encoding='utf-8', level=logging.INFO)
 
     def BuildOutputFile(self, OutputfileName):
+        start = timer()
         self.Outputfile = open(OutputfileName, "w", encoding="utf-8")
         self.LoadSite()
         self.Outputfile.close()
         self.DumpUnknownCharsList()
+        # Write time elapsed to log file
+        elapsed = timedelta(seconds = timer()-start)
+        logging.info("--------------------------------------------------")
+        logging.info(f"Finished script in {elapsed}")
+        logging.info("--------------------------------------------------")
 
     def LoadSite(self):
-        # Search for drug id
         logging.info(f"Loading drug search words list for {SEARCH_FOR}.")
-        SearchFor = requests.post(SEARCH_4_DRUG_URL, json=[SEARCH_FOR])
+        # 1.) Search by the keyword <SEARCH_FOR> (Search button was clicked) -> A full list with all drugid's containing the keyword will be returned. The first entry is the "exact" match of the keyword !
+        SearchFor = requests.post(SEARCH_4_DRUG_URL, json=[SEARCH_FOR], headers=additional_headers)
         EncryptedDrugID = SearchFor.json()[0]["DrugId"]["DrugId"]["Encrypted"]
         logging.info(f"Taking first encrypted DrugId searchword: {EncryptedDrugID}")
-        # Get complete result
-        self.FullSearchList = requests.post(LIST_ALL_GROUPS, json=[{"DrugId": {"Encrypted": EncryptedDrugID}}])
+        # 2.) Get a list of all available distribution's containing the drugid / keyword <SEARCH_FOR>
+        self.FullSearchList = requests.post(LIST_ALL_GROUPS,
+                                            json=[{"DrugId": {"Encrypted": EncryptedDrugID}}],
+                                            headers=additional_headers)
         logging.info(
             f"Getting full crypted list of statistics: {json.dumps(self.FullSearchList.json(), indent=4, sort_keys=True)}")
         # get json datas
@@ -195,24 +225,39 @@ class VigiAccess:
     def Dump_Effect_Details(self, EncryptedDrugID, EncryptedSocId):
         Page = 0
         while (True):
-            FullDetailsListJSON = requests.post(LIST_ALL_TERMS,
+            # Random sleep a time beetween 100 and 500ms to simulate a user "click"
+            if not Page == 0:
+                RandomSleepTimeMs = randint(100, 500)/1000
+                sleep(RandomSleepTimeMs)
+            logging.info(f"Try to load page '{Page}' of primaryTerm with SocId '{EncryptedSocId}' of DrugId '{EncryptedDrugID}'")
+            # 3.) Page by page reloading of the primaryterms to the individual distributions as same as when the user is clicking on the "Load more..." link.
+            FullDetailsListPrimaryTerms = requests.post(LIST_ALL_TERMS,
                                                 json=[{"DrugId": {"DrugId": {"Encrypted": EncryptedDrugID}},
                                                        "SocId": {"SocId": {"Encrypted": EncryptedSocId}},
-                                                       "Page": Page}])
-            if "Pts" in FullDetailsListJSON.json():
-                FullDetailsListJson = FullDetailsListJSON.json()["Pts"]
-                if len(FullDetailsListJson) > 0:
-                    for Detail in FullDetailsListJson:
-                        Count = Detail["Count"]
-                        Description = self.DeObfuscated(Detail["Description"]["Obfuscated"])
-                        Output = f"{TAB}{TAB}{Description} ({Count})"
-                        logging.info(f"Output detail: {Output}")
-                        self.WriteOutputLine(Output)
-                    Page = Page + 1  # Next page at next loop
+                                                       "Page": Page}]
+                                                , headers=additional_headers)
+            logging.info(f"Getting result of page '{Page}':")
+            logging.info(FullDetailsListPrimaryTerms)
+            try:
+                FullDetailsListPrimaryTermsJSON = FullDetailsListPrimaryTerms.json()
+                logging.info(f"Getting result of page '{Page}' as JSON:")
+                logging.info(pformat(FullDetailsListPrimaryTermsJSON))
+                if "Pts" in FullDetailsListPrimaryTermsJSON:
+                    FullDetailsListJson = FullDetailsListPrimaryTerms.json()["Pts"]
+                    if len(FullDetailsListJson) > 0:
+                        for Detail in FullDetailsListJson:
+                            Count = Detail["Count"]
+                            Description = self.DeObfuscated(Detail["Description"]["Obfuscated"])
+                            Output = f"{TAB}{TAB}{Description} ({Count})"
+                            logging.info(f"Output detail: {Output}")
+                            self.WriteOutputLine(Output)
+                        Page = Page + 1  # Next page at next loop
+                    else:
+                        break  # No details any more -> finished
                 else:
                     break  # No details any more -> finished
-            else:
-                break  # No details any more -> finished
+            except Exception as e:
+                logging.error(traceback.format_exc())
 
     def DumpGeographicalDistribution(self, GeoDisJSON):
         self.WriteOutputLine(f"")
